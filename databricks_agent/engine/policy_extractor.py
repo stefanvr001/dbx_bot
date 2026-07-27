@@ -1,7 +1,3 @@
-"""
-Policy Entity Extraction & Multi-Policy Disambiguation Engine for Customer Correspondence.
-Identifies policy numbers from text/customer metadata and detects ambiguities.
-"""
 import re
 from typing import Dict, Any, List, Optional, Tuple
 from databricks_agent.db_store import db_store

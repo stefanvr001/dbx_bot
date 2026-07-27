@@ -1,22 +1,20 @@
-"""
-Databricks Customer Service AI Agent Core Orchestrator.
-Combines Policy Disambiguation, Tool Selection, Execution, and Response Generation.
-MLflow PyFunc and Mosaic AI Agent Framework compatible.
-"""
 from typing import Dict, Any, List, Optional, Tuple
 import databricks_agent.tools
 from databricks_agent.tools.registry import tool_registry
 from databricks_agent.engine.policy_extractor import PolicyExtractor
+from databricks_agent.engine.chat_history import chat_history
 
 class CustomerServiceAgent:
     """Databricks AI Customer Service Agent Orchestrator."""
     
     def __init__(self):
         self.registry = tool_registry
+        self.history = chat_history
 
     def process_message(
         self, 
         message: str, 
+        session_id: Optional[str] = None,
         customer_identifier: Optional[str] = None,
         override_policy_number: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -25,6 +23,7 @@ class CustomerServiceAgent:
         
         Args:
             message: Raw customer text / email / query.
+            session_id: Caller-provided session identifier for conversation history.
             customer_identifier: Optional customer email or phone number.
             override_policy_number: Explicit policy number if already disambiguated by user.
             
@@ -45,12 +44,20 @@ class CustomerServiceAgent:
             
         # If policy is ambiguous or missing, return prompt to user
         if policy_context["needs_disambiguation"]:
+            response = policy_context["disambiguation_prompt"]
+            if session_id:
+                self.history.record_turn(
+                    session_id, message_clean, response,
+                    turn_metadata={"status": "DISAMBIGUATION_REQUIRED"}
+                )
             return {
                 "status": "DISAMBIGUATION_REQUIRED",
+                "session_id": session_id,
                 "policy_context": policy_context,
-                "agent_response": policy_context["disambiguation_prompt"],
+                "agent_response": response,
                 "tool_called": None,
-                "tool_result": None
+                "tool_result": None,
+                "conversation_history": self.history.get_history(session_id) if session_id else []
             }
             
         policy_number = policy_context["policy_number"]
@@ -68,15 +75,28 @@ class CustomerServiceAgent:
         
         # 4. Synthesize final response
         agent_response = self._synthesize_response(message_clean, tool_name, tool_result)
-        
+
+        # 5. Record turn in session history
+        if session_id:
+            self.history.record_turn(
+                session_id, message_clean, agent_response,
+                turn_metadata={
+                    "intent": tool_name,
+                    "policy_number": policy_number,
+                    "tool_result_status": tool_result.get("status"),
+                }
+            )
+
         return {
             "status": "SUCCESS",
+            "session_id": session_id,
             "policy_number": policy_number,
             "intent_detected": tool_name,
             "tool_called": tool_name,
             "tool_parameters": tool_kwargs,
             "tool_result": tool_result,
-            "agent_response": agent_response
+            "agent_response": agent_response,
+            "conversation_history": self.history.get_history(session_id) if session_id else []
         }
 
     def _select_tool_and_args(self, message: str, policy_number: str) -> Tuple[Optional[str], Dict[str, Any]]:
