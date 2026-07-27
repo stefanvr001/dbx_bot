@@ -139,8 +139,54 @@ print(response)
 
 ---
 
-## ☁️ Databricks Deployment Guide
+## 🌐 API Deployment Options for System / UI Integration
 
-1. **Deploy Data Layer**: Execute `notebooks/01_setup_delta_tables.py` in your Databricks Workspace to initialize Delta tables in Unity Catalog.
-2. **Register UC Tools**: Execute `tool_registry.to_uc_functions()` in a SQL notebook to create Unity Catalog AI Functions.
-3. **Deploy Mosaic AI Model Serving**: Wrap `CustomerServiceAgent` in an MLflow PyFunc model using `mlflow.pyfunc.log_model()` and deploy to a Databricks Model Serving endpoint.
+You can deploy this agent as an API using **two primary options**:
+
+---
+
+### Option A: Standalone FastAPI REST & MCP API Server (`databricks_agent/api_server.py`)
+
+Deploy as a microservice API for Web Chat Widgets, WhatsApp, Teams, Mobile Apps, or MCP Clients:
+
+```bash
+# Run locally or in a container / VM
+python databricks_agent/api_server.py
+```
+App starts on `http://localhost:8000`.
+
+#### Endpoints Provided:
+- **`POST /api/v1/chat`**: Standard REST API for frontend UIs & chat widgets.
+  - **Request Payload**:
+    ```json
+    {
+      "message": "Send policy schedule for POL-1001",
+      "customer_identifier": "john.doe@example.com",
+      "override_policy_number": null
+    }
+    ```
+  - **Response Payload**: Returns `status`, `intent_detected`, `agent_response`, `policy_number`, `tool_result`, and `policy_context` (for disambiguation prompts).
+
+- **`POST /api/v1/mcp`**: Standard Model Context Protocol (MCP) JSON-RPC 2.0 endpoint for Claude Desktop, Cursor, and MCP clients.
+- **`GET /api/v1/tools`**: Catalog of registered policy tools & schemas.
+
+---
+
+### Option B: Native Databricks Mosaic AI Model Serving (`notebooks/03_deploy_model_serving.py`)
+
+Log the agent as an **MLflow PyFunc model** and deploy to an auto-scaling **Databricks Model Serving Endpoint**:
+
+1. Open `notebooks/03_deploy_model_serving.py` in your Databricks Workspace.
+2. Run the notebook to register model `main.insurance_customer_service.customer_service_agent` in Unity Catalog and create endpoint `insurance-customer-service-agent-endpoint`.
+3. Invoke via Databricks REST API:
+   ```bash
+   curl -X POST \
+     -H "Authorization: Bearer <DATABRICKS_TOKEN>" \
+     -H "Content-Type: application/json" \
+     -d '{"dataframe_records": [{"message": "What is my debit order date for POL-1001?"}]}' \
+     https://<databricks-instance>/serving-endpoints/insurance-customer-service-agent-endpoint/invocations
+   ```
+
+---
+
+## 🛠️ How to Run & Verify

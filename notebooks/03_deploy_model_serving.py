@@ -1,0 +1,105 @@
+# Databricks Notebook: 03_deploy_model_serving
+# COMMAND ----------
+# MAGIC %md
+# MAGIC # Deploy Customer Service AI Agent to Databricks Mosaic AI Model Serving
+# MAGIC 
+# MAGIC This notebook packages the agent as an **MLflow PyFunc Model** and deploys it to a 
+# MAGIC real-time auto-scaling **Databricks Model Serving Endpoint**.
+
+# COMMAND ----------
+import mlflow
+import mlflow.pyfunc
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import EndpointCoreConfigInput, ServedEntityInput
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 1. Define MLflow PyFunc Wrapper for Databricks Serving
+
+# COMMAND ----------
+class DatabricksAgentPyFunc(mlflow.pyfunc.PythonModel):
+    """
+    MLflow PyFunc wrapper for Databricks Customer Service Agent.
+    Compatible with Databricks Model Serving `/invocations` REST API.
+    """
+    
+    def load_context(self, context):
+        import sys
+        import os
+        sys.path.append(context.artifacts["agent_code"])
+        from databricks_agent.engine.agent import agent
+        self.agent = agent
+
+    def predict(self, context, model_input):
+        """
+        Accepts DataFrame or JSON dict payload:
+        {
+          "message": "Send policy schedule for POL-1001",
+          "customer_identifier": "john.doe@example.com",
+          "override_policy_number": null
+        }
+        """
+        if hasattr(model_input, "to_dict"):
+            records = model_input.to_dict(orient="records")
+        elif isinstance(model_input, list):
+            records = model_input
+        else:
+            records = [model_input]
+            
+        results = []
+        for record in records:
+            msg = record.get("message", "")
+            cust = record.get("customer_identifier")
+            override = record.get("override_policy_number")
+            
+            res = self.agent.process_message(msg, customer_identifier=cust, override_policy_number=override)
+            results.append(res)
+            
+        return results
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 2. Register & Log Model in Unity Catalog
+
+# COMMAND ----------
+mlflow.set_registry_uri("databricks-uc")
+
+MODEL_NAME = "main.insurance_customer_service.customer_service_agent"
+
+with mlflow.start_run(run_name="agent_model_serving_v1"):
+    model_info = mlflow.pyfunc.log_model(
+        artifact_path="agent_model",
+        python_model=DatabricksAgentPyFunc(),
+        registered_model_name=MODEL_NAME,
+        pip_requirements=["mlflow", "pydantic"]
+    )
+    print(f"✅ Model registered in Unity Catalog: {MODEL_NAME}")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 3. Create / Update Databricks Model Serving Endpoint
+
+# COMMAND ----------
+w = WorkspaceClient()
+
+ENDPOINT_NAME = "insurance-customer-service-agent-endpoint"
+
+print(f"🚀 Deploying Databricks Model Serving Endpoint: '{ENDPOINT_NAME}' ...")
+
+# Configure Serving Endpoint
+w.serving_endpoints.create_and_wait(
+    name=ENDPOINT_NAME,
+    config=EndpointCoreConfigInput(
+        served_entities=[
+            ServedEntityInput(
+                entity_name=MODEL_NAME,
+                entity_version="1",
+                workload_size="Small",
+                scale_to_zero_enabled=True
+            )
+        ]
+    )
+)
+
+print(f"🎉 Serving Endpoint is LIVE!")
+print(f"Invoke REST URL: https://<databricks-instance>/serving-endpoints/{ENDPOINT_NAME}/invocations")
