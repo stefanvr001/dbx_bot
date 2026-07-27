@@ -1,7 +1,3 @@
-"""
-Model Context Protocol (MCP) Server Adapter for Databricks Customer Service Agent.
-Exposes registered policy tools over MCP JSON-RPC protocol.
-"""
 import json
 from typing import Dict, Any
 from databricks_agent.tools.registry import tool_registry

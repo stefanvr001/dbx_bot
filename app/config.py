@@ -1,6 +1,3 @@
-"""
-Configuration settings for Databricks Customer Service Agent
-"""
 import os
 
 DATABRICKS_CATALOG = os.getenv("DATABRICKS_CATALOG", "main")

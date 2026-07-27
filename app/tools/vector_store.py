@@ -1,12 +1,8 @@
-"""
-Mock Databricks Vector Search index simulator for Policy Terms and Conditions (T&C) Q&A.
-Simulates semantic retrieval over policy wording documents.
-"""
 from typing import List, Dict, Any, Optional
 
 class PolicyVectorStore:
     """Databricks Vector Search index simulation over policy T&Cs."""
-    
+
     def __init__(self):
         # Sample document chunks indexed from policy terms & conditions PDFs
         self.documents = [
@@ -47,36 +43,32 @@ class PolicyVectorStore:
                 "content": "Covers physical damage to buildings caused by storm, flood, fire, explosion, or burst water pipes. Geyser replacement cover includes damage up to R15,000 per incident."
             }
         ]
-        
+
     def search(self, query: str, policy_type: Optional[str] = None, top_k: int = 3) -> List[Dict[str, Any]]:
-        """
-        Simulate Databricks Vector Search similarity query.
-        Matches relevant policy T&C chunks based on query terms.
-        """
         query_words = set(query.lower().split())
         scored_docs = []
-        
+
         for doc in self.documents:
             # Filter by policy_type if provided
             if policy_type and policy_type.lower() not in doc["policy_type"].lower() and doc["policy_type"] != "General Terms":
                 continue
-                
+
             text = f"{doc['section']} {doc['content']}".lower()
             match_score = sum(1 for word in query_words if word in text)
-            
+
             # Simple keyword relevance weighting
             if match_score > 0:
                 scored_docs.append((match_score, doc))
-                
+
         # Sort descending by relevance score
         scored_docs.sort(key=lambda x: x[0], reverse=True)
-        
+
         results = [doc for score, doc in scored_docs[:top_k]]
-        
+
         # Fallback if no specific keyword match
         if not results:
             results = self.documents[:top_k]
-            
+
         return results
 
 # Global Vector Store instance

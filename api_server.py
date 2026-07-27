@@ -9,10 +9,10 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 
 # Custom
-from databricks_agent.engine.agent import agent
-from databricks_agent.engine.chat_history import chat_history
-from databricks_agent.mcp.mcp_server import mcp_server
-from databricks_agent.tools.registry import tool_registry
+from app.agent import agent
+from app.chat_history import chat_history
+from app.mcp_server import mcp_server
+from app.tool_registry import tool_registry
 
 class ChatRequest(BaseModel):
     session_id: str = Field(
